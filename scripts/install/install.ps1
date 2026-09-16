@@ -964,21 +964,7 @@ try {
                 if (-not (Test-Path -LiteralPath $archiveOverride -PathType Leaf)) {
                     throw "NOVA_INSTALLER_ARCHIVE_OVERRIDE points to a missing file: $archiveOverride"
                 }
-                $expectedPackageDigest = if ($installLayout -eq "Package") {
-                    if ($null -ne $checksumMetadata) {
-                        $checksumContent = (Invoke-WebRequest -UseBasicParsing -Uri $checksumMetadata.Url -TimeoutSec $ReleasesAssetTimeoutSec).Content
-                        $escapedAsset = [regex]::Escape($packageAsset)
-                        $match = [regex]::Match($checksumContent, "^\s*([0-9a-fA-F]{64})\s+$escapedAsset\s*$", [System.Text.RegularExpressions.RegexOptions]::Multiline)
-                        if (-not $match.Success) {
-                            throw "Could not find SHA-256 digest for $packageAsset in $checksumAsset."
-                        }
-                        $match.Groups[1].Value.ToLowerInvariant()
-                    } else {
-                        $packageMetadata.Sha256
-                    }
-                } else {
-                    $packageMetadata.Sha256
-                }
+                $expectedPackageDigest = $packageMetadata.Sha256
                 Test-ArchiveDigest -ArchivePath $archiveOverride -ExpectedDigest $expectedPackageDigest
                 Copy-Item -LiteralPath $archiveOverride -Destination $archivePath -Force
             } else {
