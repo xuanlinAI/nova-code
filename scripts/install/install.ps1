@@ -907,7 +907,7 @@ $releasesDir = Join-Path $standaloneRoot "releases"
 $currentDir = Join-Path $standaloneRoot "current"
 $lockPath = Join-Path $standaloneRoot "install.lock"
 
-$defaultVisibleBinDir = Join-Path $env:LOCALAPPDATA "Programs\OpenAI\Nova\bin"
+$defaultVisibleBinDir = Join-Path $env:LOCALAPPDATA "Programs\xuanlinAI\Nova\bin"
 if ([string]::IsNullOrWhiteSpace($env:NOVA_INSTALL_DIR)) {
     $visibleBinDir = $defaultVisibleBinDir
 } else {
