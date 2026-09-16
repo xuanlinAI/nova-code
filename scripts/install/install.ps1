@@ -956,14 +956,41 @@ try {
             $checksumPath = Join-Path $tempDir $checksumAsset
             $stagingDir = Join-Path $releasesDir ".staging.$releaseName.$PID"
 
-            Write-Step "Downloading Nova CLI"
-            if ($installLayout -eq "Package") {
-                Invoke-WebRequestWithFallback -Metadata $checksumMetadata -OutFile $checksumPath -ExpectedDigest $checksumMetadata.Sha256 -AssetName $checksumAsset -ReleaseVersion $resolvedVersion -RequiredManifestAsset $packageAsset
-                $expectedPackageDigest = Get-PackageArchiveDigest -ManifestPath $checksumPath -AssetName $packageAsset
+            $archiveOverride = $env:NOVA_INSTALLER_ARCHIVE_OVERRIDE
+            if (-not [string]::IsNullOrWhiteSpace($archiveOverride)) {
+                # Offline/flaky-network install: use a local archive instead of
+                # downloading it. The digest still comes from release metadata.
+                Write-Step "Using local package archive: $archiveOverride"
+                if (-not (Test-Path -LiteralPath $archiveOverride -PathType Leaf)) {
+                    throw "NOVA_INSTALLER_ARCHIVE_OVERRIDE points to a missing file: $archiveOverride"
+                }
+                $expectedPackageDigest = if ($installLayout -eq "Package") {
+                    if ($null -ne $checksumMetadata) {
+                        $checksumContent = (Invoke-WebRequest -UseBasicParsing -Uri $checksumMetadata.Url -TimeoutSec $ReleasesAssetTimeoutSec).Content
+                        $escapedAsset = [regex]::Escape($packageAsset)
+                        $match = [regex]::Match($checksumContent, "^\s*([0-9a-fA-F]{64})\s+$escapedAsset\s*$", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+                        if (-not $match.Success) {
+                            throw "Could not find SHA-256 digest for $packageAsset in $checksumAsset."
+                        }
+                        $match.Groups[1].Value.ToLowerInvariant()
+                    } else {
+                        $packageMetadata.Sha256
+                    }
+                } else {
+                    $packageMetadata.Sha256
+                }
+                Test-ArchiveDigest -ArchivePath $archiveOverride -ExpectedDigest $expectedPackageDigest
+                Copy-Item -LiteralPath $archiveOverride -Destination $archivePath -Force
             } else {
-                $expectedPackageDigest = $packageMetadata.Sha256
+                Write-Step "Downloading Nova CLI"
+                if ($installLayout -eq "Package") {
+                    Invoke-WebRequestWithFallback -Metadata $checksumMetadata -OutFile $checksumPath -ExpectedDigest $checksumMetadata.Sha256 -AssetName $checksumAsset -ReleaseVersion $resolvedVersion -RequiredManifestAsset $packageAsset
+                    $expectedPackageDigest = Get-PackageArchiveDigest -ManifestPath $checksumPath -AssetName $packageAsset
+                } else {
+                    $expectedPackageDigest = $packageMetadata.Sha256
+                }
+                Invoke-WebRequestWithFallback -Metadata $packageMetadata -OutFile $archivePath -ExpectedDigest $expectedPackageDigest -AssetName $packageAsset -ReleaseVersion $resolvedVersion
             }
-            Invoke-WebRequestWithFallback -Metadata $packageMetadata -OutFile $archivePath -ExpectedDigest $expectedPackageDigest -AssetName $packageAsset -ReleaseVersion $resolvedVersion
 
             New-Item -ItemType Directory -Force -Path $releasesDir | Out-Null
             if (Test-Path -LiteralPath $stagingDir) {
