@@ -12,15 +12,6 @@ if ([string]::IsNullOrWhiteSpace($Release)) {
 }
 
 $NonInteractive = $env:NOVA_NON_INTERACTIVE -match "^(?i:1|true|yes)$"
-$DefaultPreferReleasesOpenAICom = $false
-$PreferReleasesOpenAICom = if ([string]::IsNullOrWhiteSpace($env:NOVA_INSTALLER_USE_LEGACY_RELEASES_OPENAI_COM)) {
-    $DefaultPreferReleasesOpenAICom
-} else {
-    $env:NOVA_INSTALLER_USE_LEGACY_RELEASES_OPENAI_COM -match "^(?i:1|true|yes)$"
-}
-$ReleasesBaseUri = "https://releases.openai.com/codex"
-$ReleasesMetadataTimeoutSec = 30
-$ReleasesAssetTimeoutSec = 300
 
 function Write-Step {
     param(
@@ -121,11 +112,7 @@ function Invoke-WebRequestWithFallback {
     )
 
     try {
-        if ($Metadata.Url.StartsWith("$ReleasesBaseUri/", [System.StringComparison]::OrdinalIgnoreCase)) {
-            Invoke-WebRequest -UseBasicParsing -Uri $Metadata.Url -OutFile $OutFile -TimeoutSec $ReleasesAssetTimeoutSec
-        } else {
-            Invoke-WebRequest -UseBasicParsing -Uri $Metadata.Url -OutFile $OutFile
-        }
+        Invoke-WebRequest -UseBasicParsing -Uri $Metadata.Url -OutFile $OutFile
         Test-ArchiveDigest -ArchivePath $OutFile -ExpectedDigest $ExpectedDigest
         if (-not [string]::IsNullOrWhiteSpace($RequiredManifestAsset)) {
             $null = Get-PackageArchiveDigest -ManifestPath $OutFile -AssetName $RequiredManifestAsset
@@ -170,12 +157,6 @@ function Resolve-ReleaseAssetSelection {
     $packageFallbackUrl = $null
     $checksumUrl = $null
     $checksumFallbackUrl = $null
-    if ($ResolvedRelease.Source -eq "ReleasesOpenAICom") {
-        $packageUrl = "$ReleasesBaseUri/releases/$version/$packageAsset"
-        $packageFallbackUrl = "https://github.com/xuanlinAI/nova-code/releases/download/rust-v$version/$packageAsset"
-        $checksumUrl = "$ReleasesBaseUri/releases/$version/$checksumAsset"
-        $checksumFallbackUrl = "https://github.com/xuanlinAI/nova-code/releases/download/rust-v$version/$checksumAsset"
-    }
 
     $packageMetadata = Find-ReleaseAssetMetadata -AssetName $packageAsset -ReleaseMetadata $releaseMetadata -Url $packageUrl -FallbackUrl $packageFallbackUrl
     $checksumMetadata = Find-ReleaseAssetMetadata -AssetName $checksumAsset -ReleaseMetadata $releaseMetadata -Url $checksumUrl -FallbackUrl $checksumFallbackUrl
@@ -191,10 +172,6 @@ function Resolve-ReleaseAssetSelection {
     $packageAsset = "nova-npm-$NpmTag-$version.tgz"
     $packageUrl = $null
     $packageFallbackUrl = $null
-    if ($ResolvedRelease.Source -eq "ReleasesOpenAICom") {
-        $packageUrl = "$ReleasesBaseUri/releases/$version/$packageAsset"
-        $packageFallbackUrl = "https://github.com/xuanlinAI/nova-code/releases/download/rust-v$version/$packageAsset"
-    }
     $packageMetadata = Find-ReleaseAssetMetadata -AssetName $packageAsset -ReleaseMetadata $releaseMetadata -Url $packageUrl -FallbackUrl $packageFallbackUrl
     if ($null -eq $packageMetadata) {
         throw "Could not find Nova package or platform npm release assets for Nova $version."
@@ -356,46 +333,9 @@ function Resolve-ReleaseFromGitHub {
     }
 }
 
-function Resolve-ReleaseFromReleases {
-    param(
-        [string]$NormalizedVersion
-    )
-
-    $metadataUri = if ($NormalizedVersion -eq "latest") {
-        "$ReleasesBaseUri/channels/latest"
-    } else {
-        "$ReleasesBaseUri/releases/$NormalizedVersion/release.json"
-    }
-    try {
-        $metadataResponse = Invoke-WebRequest -UseBasicParsing -Uri $metadataUri -TimeoutSec $ReleasesMetadataTimeoutSec
-        $releaseMetadata = [string]$metadataResponse.Content | ConvertFrom-Json -ErrorAction Stop
-        $resolvedVersion = Resolve-VersionFromReleaseMetadata -ReleaseMetadata $releaseMetadata
-        if ($NormalizedVersion -ne "latest" -and $resolvedVersion -cne $NormalizedVersion) {
-            throw "Release metadata version did not match requested Nova version $NormalizedVersion."
-        }
-        $resolvedRelease = [PSCustomObject]@{
-            Version = $resolvedVersion
-            Metadata = $releaseMetadata
-            Source = "ReleasesOpenAICom"
-        }
-        $null = Resolve-ReleaseAssetSelection -ResolvedRelease $resolvedRelease -Target $target -NpmTag $npmTag
-    } catch {
-        return $null
-    }
-    return $resolvedRelease
-}
-
 function Resolve-Release {
     $normalizedVersion = Normalize-Version -RawVersion $Release
     Assert-ValidReleaseVersion -Version $normalizedVersion
-
-    if ($PreferReleasesOpenAICom) {
-        $release = Resolve-ReleaseFromReleases -NormalizedVersion $normalizedVersion
-        if ($null -ne $release) {
-            return $release
-        }
-        Write-WarningStep "releases.openai.com is unavailable; falling back to GitHub Releases."
-    }
 
     return Resolve-ReleaseFromGitHub -NormalizedVersion $normalizedVersion
 }
@@ -836,9 +776,9 @@ function Maybe-HandleConflictingInstall {
     $manager = $Conflict.Manager
 
     $uninstallArgs = if ($manager -eq "bun") {
-        @("remove", "-g", "@nova-code/nova")
+        @("remove", "-g", "@xuanlinai/nova-code")
     } else {
-        @("uninstall", "-g", "@nova-code/nova")
+        @("uninstall", "-g", "@xuanlinai/nova-code")
     }
     $uninstallCommand = if ($manager -eq "bun") { "bun" } else { "npm" }
 
