@@ -1,8 +1,4 @@
 <p align="center"><strong>Nova CLI</strong></p>
-<p align="center">
-  <img src="https://github.com/xuanlinAI/nova-code/blob/main/.github/nova-cli-splash.png" alt="Nova CLI splash" width="80%" />
-</p>
-</br>
 
 Nova Code 是基于 [OpenAI Codex CLI](https://github.com/openai/codex) 二次开发的项目。
 
