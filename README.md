@@ -10,7 +10,15 @@
 
 ### Installing Nova CLI
 
-Run the following on Windows to install Nova CLI:
+**Via npm** (recommended — one command, no admin rights):
+
+```shell
+npm install -g @xuanlinai/nova-code
+```
+
+**Via the standalone installers** (downloads from GitHub Releases):
+
+On Windows:
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/xuanlinAI/nova-code/main/scripts/install/install.ps1 | iex"
@@ -22,9 +30,7 @@ On macOS or Linux:
 curl -fsSL https://raw.githubusercontent.com/xuanlinAI/nova-code/main/scripts/install/install.sh | sh
 ```
 
-The installers download from GitHub Releases and install to a per-user location (no admin rights needed).
-
-> **Platform status** — v0.1.0 ships Windows x64 binaries. macOS / Linux / Windows ARM64 packages are not published yet; build from source in the meantime (see [Installing & building](./docs/install.md)).
+> **Platform status** — only Windows x64 binaries are published. macOS / Linux / Windows ARM64 packages are not available yet; build from source in the meantime (see [Installing & building](./docs/install.md)).
 
 ### First run
 
