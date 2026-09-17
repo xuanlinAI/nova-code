@@ -4,12 +4,6 @@ set -eu
 
 RELEASE="${NOVA_RELEASE:-latest}"
 NON_INTERACTIVE="${NOVA_NON_INTERACTIVE:-false}"
-DEFAULT_PREFER_RELEASES_OPENAI_COM="false"
-PREFER_RELEASES_OPENAI_COM="${NOVA_INSTALLER_USE_LEGACY_RELEASES_OPENAI_COM:-$DEFAULT_PREFER_RELEASES_OPENAI_COM}"
-RELEASES_BASE_URL="https://releases.openai.com/codex"
-RELEASES_CONNECT_TIMEOUT=10
-RELEASES_METADATA_TIMEOUT=30
-RELEASES_ASSET_TIMEOUT=300
 release_source="github"
 
 BIN_DIR="${NOVA_INSTALL_DIR:-$HOME/.local/bin}"
@@ -86,8 +80,7 @@ Usage: install.sh [--release VERSION]
 Environment:
   NOVA_RELEASE          Version to install; overridden by --release.
   NOVA_NON_INTERACTIVE  Set to 1, true, or yes to skip prompts.
-  NOVA_INSTALLER_USE_LEGACY_RELEASES_OPENAI_COM
-                         Set to 0, false, or no to use GitHub Releases.
+  NOVA_INSTALL_DIR      Directory to install the nova binary into.
 EOF
         exit 0
         ;;
@@ -105,26 +98,12 @@ download_file() {
   output="$2"
 
   if command -v curl >/dev/null 2>&1; then
-    case "$url" in
-      "$RELEASES_BASE_URL"/*)
-        curl -fsSL --connect-timeout "$RELEASES_CONNECT_TIMEOUT" --max-time "$RELEASES_ASSET_TIMEOUT" "$url" -o "$output"
-        ;;
-      *)
-        curl -fsSL "$url" -o "$output"
-        ;;
-    esac
+    curl -fsSL "$url" -o "$output"
     return
   fi
 
   if command -v wget >/dev/null 2>&1; then
-    case "$url" in
-      "$RELEASES_BASE_URL"/*)
-        wget -q -t 1 -T "$RELEASES_ASSET_TIMEOUT" -O "$output" "$url"
-        ;;
-      *)
-        wget -q -O "$output" "$url"
-        ;;
-    esac
+    wget -q -O "$output" "$url"
     return
   fi
 
@@ -136,26 +115,12 @@ download_text() {
   url="$1"
 
   if command -v curl >/dev/null 2>&1; then
-    case "$url" in
-      "$RELEASES_BASE_URL"/*)
-        curl -fsSL --connect-timeout "$RELEASES_CONNECT_TIMEOUT" --max-time "$RELEASES_METADATA_TIMEOUT" "$url"
-        ;;
-      *)
-        curl -fsSL "$url"
-        ;;
-    esac
+    curl -fsSL "$url"
     return
   fi
 
   if command -v wget >/dev/null 2>&1; then
-    case "$url" in
-      "$RELEASES_BASE_URL"/*)
-        wget -q -t 1 -T "$RELEASES_METADATA_TIMEOUT" -O - "$url"
-        ;;
-      *)
-        wget -q -O - "$url"
-        ;;
-    esac
+    wget -q -O - "$url"
     return
   fi
 
@@ -310,13 +275,6 @@ release_url_for_asset() {
   printf 'https://github.com/xuanlinAI/nova-code/releases/download/rust-v%s/%s\n' "$resolved_version" "$asset"
 }
 
-releases_url_for_asset() {
-  asset="$1"
-  resolved_version="$2"
-
-  printf '%s/releases/%s/%s\n' "$RELEASES_BASE_URL" "$resolved_version" "$asset"
-}
-
 release_metadata_url() {
   resolved_version="$1"
 
@@ -371,48 +329,9 @@ resolve_release_from_github() {
   release_source="github"
 }
 
-resolve_release_from_releases() {
-  normalized_version="$1"
-
-  if [ "$normalized_version" = "latest" ]; then
-    requested_release="latest"
-    metadata_url="$RELEASES_BASE_URL/channels/latest"
-  else
-    requested_release="$normalized_version"
-    metadata_url="$RELEASES_BASE_URL/releases/$normalized_version/release.json"
-  fi
-
-  if ! release_json="$(download_text "$metadata_url")"; then
-    return 1
-  fi
-
-  if ! parse_downloaded_release_metadata "$requested_release" "releases.openai.com"; then
-    return 1
-  fi
-  if ! resolve_metadata_version; then
-    return 1
-  fi
-  if [ "$normalized_version" != "latest" ] && [ "$metadata_version" != "$normalized_version" ]; then
-    echo "Release metadata version did not match requested Nova version $normalized_version." >&2
-    return 1
-  fi
-  resolved_version="$metadata_version"
-  release_source="releases.openai.com"
-}
-
 resolve_release() {
   normalized_version="$(normalize_version "$RELEASE")"
   validate_version "$normalized_version"
-
-  case "$PREFER_RELEASES_OPENAI_COM" in
-    1 | [Tt][Rr][Uu][Ee] | [Yy][Ee][Ss])
-      if resolve_release_from_releases "$normalized_version" &&
-        select_release_assets; then
-        return
-      fi
-      warn "releases.openai.com is unavailable; falling back to GitHub Releases."
-      ;;
-  esac
 
   resolve_release_from_github "$normalized_version"
   select_release_assets
@@ -478,18 +397,9 @@ select_release_assets() {
     return 1
   fi
 
-  if [ "$release_source" = "releases.openai.com" ]; then
-    download_url="$(releases_url_for_asset "$asset" "$resolved_version")"
-    download_fallback_url="$(release_url_for_asset "$asset" "$resolved_version")"
-    if [ "$install_layout" = "package" ]; then
-      checksum_url="$(releases_url_for_asset "$checksum_asset" "$resolved_version")"
-      checksum_fallback_url="$(release_url_for_asset "$checksum_asset" "$resolved_version")"
-    fi
-  else
-    download_url="$(release_url_for_asset "$asset" "$resolved_version")"
-    if [ "$install_layout" = "package" ]; then
-      checksum_url="$(release_url_for_asset "$checksum_asset" "$resolved_version")"
-    fi
+  download_url="$(release_url_for_asset "$asset" "$resolved_version")"
+  if [ "$install_layout" = "package" ]; then
+    checksum_url="$(release_url_for_asset "$checksum_asset" "$resolved_version")"
   fi
 }
 
@@ -915,10 +825,10 @@ handle_conflicting_install() {
       uninstall_cmd="brew uninstall --cask nova"
       ;;
     bun)
-      uninstall_cmd="bun remove -g @nova-code/nova"
+      uninstall_cmd="bun remove -g @xuanlinai/nova-code"
       ;;
     *)
-      uninstall_cmd="npm uninstall -g @nova-code/nova"
+      uninstall_cmd="npm uninstall -g @xuanlinai/nova-code"
       ;;
   esac
 
